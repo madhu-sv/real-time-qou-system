@@ -1,5 +1,6 @@
 package com.madhu.qou.service.rewriting;
 
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
 import co.elastic.clients.elasticsearch._types.query_dsl.*;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import com.madhu.qou.dto.UnderstoodQuery;
@@ -14,15 +15,12 @@ import java.util.Map;
 @Slf4j
 public class QueryRewriteService {
 
-    // <-- FIX: Define the index name here
     private final String indexName = "products_index";
-
     private static final Map<String, String> SYNONYM_MAP = Map.of("shoes", "footwear");
 
     public SearchRequest buildEsQuery(UnderstoodQuery understoodQuery) {
         final String queryText = understoodQuery.preprocessedQuery().normalizedQuery();
         final var entities = understoodQuery.entities();
-        final var userContext = understoodQuery.preprocessedQuery().userContext();
 
         // 1. Build "must" clause for main text query
         Query multiMatchQuery = MultiMatchQuery.of(m -> m
@@ -31,24 +29,13 @@ public class QueryRewriteService {
                 .type(TextQueryType.BestFields)
         )._toQuery();
 
+        // --- THIS IS THE MISSING LOGIC THAT IS NOW RESTORED ---
         // 2. Build "filter" clauses from extracted entities
         List<Query> filterClauses = new ArrayList<>();
         for (var entity : entities) {
             switch (entity.type()) {
                 case "BRAND" ->
                         filterClauses.add(TermQuery.of(t -> t.field("brand.keyword").value(entity.value()))._toQuery());
-                case "ATTRIBUTE_COLOR" ->
-                        filterClauses.add(NestedQuery.of(n -> n
-                                .path("attributes")
-                                .query(q -> q
-                                        .bool(b -> b
-                                                .must(
-                                                        MatchQuery.of(mq -> mq.field("attributes.name").query("color"))._toQuery(),
-                                                        MatchQuery.of(mq -> mq.field("attributes.value").query(entity.value()))._toQuery()
-                                                )
-                                        )
-                                )
-                        )._toQuery());
                 case "GROCERY_ATTRIBUTE" -> {
                     if ("organic".equals(entity.value())) {
                         filterClauses.add(TermQuery.of(t -> t.field("grocery_attributes.is_organic").value(true))._toQuery());
@@ -56,29 +43,30 @@ public class QueryRewriteService {
                 }
             }
         }
+        // --- END OF RESTORED LOGIC ---
 
-        // 3. Build "should" clauses for boosting
-        List<Query> shouldClauses = new ArrayList<>();
-        SYNONYM_MAP.forEach((key, value) -> {
-            if (queryText.contains(key)) {
-                shouldClauses.add(MultiMatchQuery.of(m -> m.query(value).fields("name", "search_aid"))._toQuery());
-            }
-        });
-
-        // 4. Assemble final Bool Query
+        // 3. Assemble the final Bool Query
         BoolQuery boolQuery = BoolQuery.of(b -> b
                 .must(multiMatchQuery)
                 .filter(filterClauses)
-                .should(shouldClauses)
         );
 
-        // 5. THIS IS THE NEW LOGGING STEP - Let's see the REAL query
         log.info("Constructed ES Query DSL: {}", boolQuery.toString());
 
-        // 6. Create the final SearchRequest object
+        // 4. Build Aggregations
+        Aggregation categoryAgg = Aggregation.of(a -> a
+                .terms(t -> t.field("categories").size(10))
+        );
+        Aggregation brandAgg = Aggregation.of(a -> a
+                .terms(t -> t.field("brand").size(10))
+        );
+
+        // 5. Create the final SearchRequest object with query AND aggregations
         return SearchRequest.of(s -> s
                 .index(indexName)
                 .query(q -> q.bool(boolQuery))
+                .aggregations("by_category", categoryAgg)
+                .aggregations("by_brand", brandAgg)
         );
     }
 }

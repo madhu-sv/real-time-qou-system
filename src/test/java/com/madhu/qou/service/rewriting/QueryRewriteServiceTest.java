@@ -1,5 +1,6 @@
 package com.madhu.qou.service.rewriting;
 
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import com.madhu.qou.dto.*;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,7 @@ class QueryRewriteServiceTest {
     private final QueryRewriteService queryRewriteService = new QueryRewriteService();
 
     @Test
-    void whenQueryContainsOrganic_thenQueryStringShouldContainFilter() {
+    void whenQueryContainsOrganic_thenQueryShouldContainFilterAndAggregations() {
         // Arrange: Create the input data our service method needs
         PreprocessedQuery preprocessedQuery = new PreprocessedQuery(
                 "organic avocados",
@@ -30,14 +31,24 @@ class QueryRewriteServiceTest {
         // Act: Call the method directly
         SearchRequest result = queryRewriteService.buildEsQuery(understoodQuery);
 
-        // Assert: Check the .toString() output of the query for key components.
-        // This is more robust than checking for one large, exact string.
-        String queryAsString = result.query().toString();
+        // Assert: Inspect the Java objects directly, which is more reliable than toString()
 
-        // Check that the key parts of the query exist in the string representation
-        assertThat(queryAsString).contains("multi_match");
-        assertThat(queryAsString).contains("organic avocados");
-        assertThat(queryAsString).contains("grocery_attributes.is_organic");
-        assertThat(queryAsString).contains("\"value\":true");
+        // 1. Assert that the main query is a 'bool' query
+        assertThat(result.query().isBool()).isTrue();
+
+        // 2. Assert that the 'filter' part of the bool query has one clause
+        List<Query> filters = result.query().bool().filter();
+        assertThat(filters).hasSize(1);
+        assertThat(filters.get(0).isTerm()).isTrue(); // Check that the filter is a term query
+        assertThat(filters.get(0).term().field()).isEqualTo("grocery_attributes.is_organic");
+        assertThat(filters.get(0).term().value().booleanValue()).isTrue();
+
+        // 3. Assert that the 'must' part has our multi_match query
+        assertThat(result.query().bool().must().get(0).isMultiMatch()).isTrue();
+        assertThat(result.query().bool().must().get(0).multiMatch().query()).isEqualTo("organic avocados");
+
+        // 4. Assert that aggregations have been added
+        assertThat(result.aggregations()).containsKey("by_category");
+        assertThat(result.aggregations()).containsKey("by_brand");
     }
 }
