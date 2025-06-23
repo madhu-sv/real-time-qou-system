@@ -39,6 +39,9 @@ dependencies {
 	// OpenCSV for reading Kaggle data
 	implementation("com.opencsv:opencsv:5.9")
 
+	testImplementation("org.testcontainers:junit-jupiter:1.19.8")
+	testImplementation("org.testcontainers:elasticsearch:1.19.8")
+
 }
 
 tasks.withType<Test> {
