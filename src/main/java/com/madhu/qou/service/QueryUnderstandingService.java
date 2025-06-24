@@ -115,6 +115,7 @@ public class QueryUnderstandingService {
             SearchRequest searchRequest = SearchRequest.of(s -> s
                     .index(suggestionIndexName)
                     .suggest(sug -> sug
+                            .text(prefix)
                             .suggesters("product-suggester", fs -> fs
                                     .completion(cs -> cs
                                             .field("suggest")
