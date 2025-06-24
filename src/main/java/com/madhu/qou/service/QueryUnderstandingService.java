@@ -31,21 +31,16 @@ public class QueryUnderstandingService {
     private final IntentAndEntityService intentAndEntityService;
     private final QueryRewriteService queryRewriteService;
 
-    // --- The Main Public Method for Searching ---
     public FacetedSearchResponse processFacetedQuery(CustomSearchRequest request) {
-        // Build the query using our private helper
         SearchRequest esRequest = buildSearchRequest(request);
 
         try {
-            // Execute the query
             SearchResponse<Product> esResponse = esClient.search(esRequest, Product.class);
 
-            // Extract products
             List<Product> products = esResponse.hits().hits().stream()
                     .map(hit -> hit.source())
                     .collect(Collectors.toList());
 
-            // Extract facets
             List<Facet> facets = parseFacets(esResponse.aggregations());
 
             return new FacetedSearchResponse(products, facets);
@@ -56,13 +51,10 @@ public class QueryUnderstandingService {
         }
     }
 
-    // --- The New Public Method for Debugging ---
     public SearchRequest getDebugQuery(CustomSearchRequest request) {
-        // Just build and return the query without executing it
         return buildSearchRequest(request);
     }
 
-    // --- Private Helper Method to Avoid Code Duplication ---
     private SearchRequest buildSearchRequest(CustomSearchRequest request) {
         PreprocessedQuery preprocessedQuery = preprocessingService.process(request);
         UnderstoodQuery understoodQuery = intentAndEntityService.process(preprocessedQuery);
@@ -96,11 +88,9 @@ public class QueryUnderstandingService {
             SearchRequest searchRequest = SearchRequest.of(s -> s
                     .index(suggestionIndexName)
                     .suggest(sug -> sug
-                            .text(prefix) // <-- FIX: The prefix is set here using .text()
                             .suggesters("product-suggester", fs -> fs
                                     .completion(cs -> cs
                                             .field("suggest")
-                                            // .prefix(prefix) <-- This was incorrect and has been removed
                                             .size(10)
                                             .skipDuplicates(true)
                                     )
@@ -110,7 +100,6 @@ public class QueryUnderstandingService {
 
             SearchResponse<Void> response = esClient.search(searchRequest, Void.class);
 
-            // Extract the text from the suggestion options
             return response.suggest().get("product-suggester").get(0)
                     .completion().options().stream()
                     .map(option -> option.text())

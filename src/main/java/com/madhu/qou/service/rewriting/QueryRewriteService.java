@@ -22,15 +22,12 @@ public class QueryRewriteService {
         final String queryText = understoodQuery.preprocessedQuery().normalizedQuery();
         final var entities = understoodQuery.entities();
 
-        // 1. Build "must" clause for main text query
         Query multiMatchQuery = MultiMatchQuery.of(m -> m
                 .query(queryText)
                 .fields("name", "description", "brand", "search_aid^0.5")
                 .type(TextQueryType.BestFields)
         )._toQuery();
 
-        // --- THIS IS THE MISSING LOGIC THAT IS NOW RESTORED ---
-        // 2. Build "filter" clauses from extracted entities
         List<Query> filterClauses = new ArrayList<>();
         for (var entity : entities) {
             switch (entity.type()) {
@@ -43,9 +40,7 @@ public class QueryRewriteService {
                 }
             }
         }
-        // --- END OF RESTORED LOGIC ---
 
-        // 3. Assemble the final Bool Query
         BoolQuery boolQuery = BoolQuery.of(b -> b
                 .must(multiMatchQuery)
                 .filter(filterClauses)
@@ -53,7 +48,6 @@ public class QueryRewriteService {
 
         log.info("Constructed ES Query DSL: {}", boolQuery.toString());
 
-        // 4. Build Aggregations
         Aggregation categoryAgg = Aggregation.of(a -> a
                 .terms(t -> t.field("categories").size(10))
         );
@@ -61,7 +55,6 @@ public class QueryRewriteService {
                 .terms(t -> t.field("brand").size(10))
         );
 
-        // 5. Create the final SearchRequest object with query AND aggregations
         return SearchRequest.of(s -> s
                 .index(indexName)
                 .query(q -> q.bool(boolQuery))
