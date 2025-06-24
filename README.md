@@ -48,7 +48,7 @@ This describes how to run the application and connect to a persistent Elasticsea
     ```bash
     ./gradlew bootRun
     ```
-    On first run, the `DataSeeder` will populate the Elasticsearch container with data from the CSV files. This may take a minute or two.
+    On startup, the application will automatically seed the `products_index` and `suggestions_index` if they do not already exist, using the CSV data in `src/main/resources/data/`.
 
 ## Running the Automated Tests
 
@@ -146,3 +146,10 @@ This special endpoint is for developers to inspect the raw Elasticsearch query b
         "rawQuery": "organic avocados"
     }'
     ```
+
+## API Documentation (Swagger / OpenAPI)
+
+Once the application is running, you can view the generated OpenAPI definition and interactive docs:
+
+- **OpenAPI JSON spec:** `http://localhost:8080/v3/api-docs`
+- **Swagger UI:** `http://localhost:8080/swagger-ui.html` or `http://localhost:8080/swagger-ui/index.html`

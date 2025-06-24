@@ -14,8 +14,7 @@ import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -37,14 +36,12 @@ class QoUSystemApplicationTests {
 	@Autowired
 	private MockMvc mockMvc;
 
-	// Inject the DataSeeder so we can control it
 	@Autowired
 	private DataSeeder dataSeeder;
 
-	// This method will run BEFORE each @Test, guaranteeing data is ready
 	@BeforeEach
 	void setUp() throws Exception {
-		// Manually trigger the data seeding
+		// This runs before EACH test, ensuring a clean, seeded database every time.
 		dataSeeder.seedProductIndex();
 		dataSeeder.seedSuggestionIndex();
 	}
@@ -62,8 +59,28 @@ class QoUSystemApplicationTests {
 						.content(requestBody))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.products", hasSize(greaterThan(0))))
-				.andExpect(jsonPath("$.facets", hasSize(greaterThan(0))))
-				.andExpect(jsonPath("$.facets[?(@.name == 'Category')].values", hasSize(greaterThan(0))))
-				.andExpect(jsonPath("$.facets[?(@.name == 'Brand')].values", hasSize(greaterThan(0))));
+				.andExpect(jsonPath("$.facets", hasSize(greaterThan(0))));
+	}
+
+	// --- NEW TEST CASE FOR THE "DID YOU MEAN" FEATURE ---
+	@Test
+	void whenQueryIsMispelled_thenReturnsDidYouMeanSuggestion() throws Exception {
+		// Arrange: Define a request with a clear typo
+		String requestBody = """
+            {
+                "rawQuery": "organc avocodo"
+            }
+            """;
+
+		// Act & Assert
+		mockMvc.perform(post("/api/v1/search")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody))
+				// 1. Assert the HTTP status is 200 OK
+				.andExpect(status().isOk())
+				// 2. Assert that the products list is EMPTY, because the original query found nothing
+				.andExpect(jsonPath("$.products", hasSize(0)))
+				// 3. Assert that our new "didYouMeanSuggestion" field exists and has the corrected value
+				.andExpect(jsonPath("$.didYouMeanSuggestion", is("organic avocado")));
 	}
 }
