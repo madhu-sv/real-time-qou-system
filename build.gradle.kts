@@ -38,6 +38,8 @@ dependencies {
 
 	// OpenCSV for reading Kaggle data
 	implementation("com.opencsv:opencsv:5.9")
+	// Swagger / OpenAPI documentation
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0")
 
 	testImplementation("org.testcontainers:junit-jupiter:1.19.8")
 	testImplementation("org.testcontainers:elasticsearch:1.19.8")
