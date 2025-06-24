@@ -23,7 +23,6 @@ public class IntentAndEntityService {
         log.info("--- Intent & Entity Step ---");
         log.info("Processing normalized query: '{}'", query);
 
-        // Simple Rule-Based Entity Extraction
         BRANDS.forEach(brand -> {
             if (query.contains(brand)) {
                 entities.add(new Entity(brand, "BRAND", query.indexOf(brand), query.indexOf(brand) + brand.length()));
@@ -40,7 +39,6 @@ public class IntentAndEntityService {
             }
         });
 
-        // Log what we found
         log.info("Found {} entities: {}", entities.size(), entities);
 
         final Intent intent = (query.startsWith("how to") || query.startsWith("what is")) ?
