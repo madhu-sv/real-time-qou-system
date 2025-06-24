@@ -60,6 +60,12 @@ public class QueryRewriteService {
                 .query(q -> q.bool(boolQuery))
                 .aggregations("by_category", categoryAgg)
                 .aggregations("by_brand", brandAgg)
+                .suggest(sug -> sug
+                        .text(queryText)
+                        .suggesters("spell-check", fs -> fs
+                                .term(t -> t.field("name"))
+                        )
+                )
         );
     }
 }
