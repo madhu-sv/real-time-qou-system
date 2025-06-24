@@ -31,8 +31,12 @@ public class QueryRewriteService {
         List<Query> filterClauses = new ArrayList<>();
         for (var entity : entities) {
             switch (entity.type()) {
-                case "BRAND" ->
-                        filterClauses.add(TermQuery.of(t -> t.field("brand.keyword").value(entity.value()))._toQuery());
+            case "BRAND" ->
+                        filterClauses.add(TermQuery.of(t -> t
+                                .field("brand")
+                                .value(entity.value())
+                                .caseInsensitive(true)
+                        )._toQuery());
                 case "GROCERY_ATTRIBUTE" -> {
                     if ("organic".equals(entity.value())) {
                         filterClauses.add(TermQuery.of(t -> t.field("grocery_attributes.is_organic").value(true))._toQuery());
@@ -41,10 +45,15 @@ public class QueryRewriteService {
             }
         }
 
-        BoolQuery boolQuery = BoolQuery.of(b -> b
-                .must(multiMatchQuery)
-                .filter(filterClauses)
-        );
+        BoolQuery boolQuery = BoolQuery.of(b -> {
+            // If a BRAND entity was detected, only apply the filter clause
+            if (entities.stream().anyMatch(e -> "BRAND".equals(e.type()))) {
+                b.filter(filterClauses);
+            } else {
+                b.must(multiMatchQuery).filter(filterClauses);
+            }
+            return b;
+        });
 
         log.info("Constructed ES Query DSL: {}", boolQuery.toString());
 
