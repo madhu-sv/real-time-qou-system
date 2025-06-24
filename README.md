@@ -23,7 +23,11 @@ This project is a sophisticated proof-of-concept for a real-time e-commerce quer
 ## Prerequisites
 
 * JDK 21 or higher
-* Docker Desktop (must be running for Testcontainers to work)
+* Docker Desktop (must be running for Testcontainers and Docker Compose)
+* Python 3.9+ and `pandas` (for generating `patterns.json`)
+  ```bash
+  pip install pandas
+  ```
 * A tool for making API requests, like `curl` or Postman.
 
 ## Project Setup

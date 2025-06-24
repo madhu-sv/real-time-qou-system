@@ -11,76 +11,107 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import java.time.Duration;
 
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
 class QoUSystemApplicationTests {
 
-	@Container
-	private static final ElasticsearchContainer elasticsearchContainer =
-			new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:8.14.0")
-					.withEnv("xpack.security.enabled", "false");
+    @Container
+    static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer(
+            "docker.elastic.co/elasticsearch/elasticsearch:8.14.0")
+            .withEnv("xpack.security.enabled", "false");
 
-	@DynamicPropertySource
-	static void setProperties(DynamicPropertyRegistry registry) {
-		registry.add("spring.elasticsearch.uris", elasticsearchContainer::getHttpHostAddress);
-	}
+    @Container
+    static final GenericContainer<?> nerApi = new GenericContainer<>("real-time-qou-system-ner-api:latest")
+            .withExposedPorts(8000)
+            .waitingFor(
+                Wait.forHttp("/ent")
+                    .forStatusCodeMatching(status -> status == 200 || status == 405)
+                    .withStartupTimeout(Duration.ofSeconds(120))
+            );
 
-	@Autowired
-	private MockMvc mockMvc;
+    @DynamicPropertySource
+    static void setProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
+    }
 
-	@Autowired
-	private DataSeeder dataSeeder;
+    @Autowired
+    private MockMvc mockMvc;
 
-	@BeforeEach
-	void setUp() throws Exception {
-		// This runs before EACH test, ensuring a clean, seeded database every time.
-		dataSeeder.seedProductIndex();
-		dataSeeder.seedSuggestionIndex();
-	}
+    @Autowired
+    private DataSeeder dataSeeder;
 
-	@Test
-	void whenSearchingForOrganic_thenReturnsProductsAndFacets() throws Exception {
-		String requestBody = """
+    @BeforeEach
+    void setUp() throws Exception {
+        dataSeeder.seedProductIndex();
+        dataSeeder.seedSuggestionIndex();
+    }
+
+    @Test
+    void whenSearchingForOrganic_thenReturnsProductsAndFacets() throws Exception {
+        String requestBody = """
             {
                 "rawQuery": "organic"
             }
             """;
 
-		mockMvc.perform(post("/api/v1/search")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(requestBody))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.products", hasSize(greaterThan(0))))
-				.andExpect(jsonPath("$.facets", hasSize(greaterThan(0))));
-	}
+        mockMvc.perform(post("/api/v1/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.products", hasSize(greaterThan(0))))
+                .andExpect(jsonPath("$.facets", hasSize(greaterThan(0))));
+    }
 
-	// --- NEW TEST CASE FOR THE "DID YOU MEAN" FEATURE ---
-	@Test
-	void whenQueryIsMispelled_thenReturnsDidYouMeanSuggestion() throws Exception {
-		// Arrange: Define a request with a clear typo
-		String requestBody = """
+    @Test
+    void whenQueryIsMispelled_thenReturnsDidYouMeanSuggestion() throws Exception {
+        String requestBody = """
             {
                 "rawQuery": "organc avocodo"
             }
             """;
 
-		// Act & Assert
-		mockMvc.perform(post("/api/v1/search")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(requestBody))
-				// 1. Assert the HTTP status is 200 OK
-				.andExpect(status().isOk())
-				// 2. Assert that the products list is EMPTY, because the original query found nothing
-				.andExpect(jsonPath("$.products", hasSize(0)))
-				// 3. Assert that our new "didYouMeanSuggestion" field exists and has the corrected value
-				.andExpect(jsonPath("$.didYouMeanSuggestion", is("organic avocado")));
-	}
+        mockMvc.perform(post("/api/v1/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.products", hasSize(0)))
+                .andExpect(jsonPath("$.didYouMeanSuggestion", is("organic avocado")));
+    }
+
+    // --- NEW AND IMPROVED TEST FOR THE NER FEATURE ---
+    @Test
+    void whenQueryContainsBrandEntity_thenResultsAreFilteredByBrand() throws Exception {
+        // Arrange: Use a query that our NER model will parse to find a BRAND
+        String requestBody = """
+            {
+                "rawQuery": "show me products from Philadelphia"
+            }
+            """;
+
+        // Act & Assert: Hit the main /search endpoint
+        mockMvc.perform(post("/api/v1/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                // 1. Assert we actually get some products back
+                .andExpect(jsonPath("$.products", hasSize(greaterThan(0))))
+                // 2. This is the crucial assertion:
+                //    It checks that in the list of results, there are NO products
+                //    where the brand is NOT 'Horizon Organic'. This proves the filter worked.
+                .andExpect(jsonPath("$.products[?(@.brand != 'Philadelphia')]", empty()));
+    }
 }
