@@ -2,9 +2,9 @@ package com.madhu.qou.service;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
-import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.TermSuggest; // <-- Import this
 import com.madhu.qou.dto.*;
 import com.madhu.qou.dto.domain.Product;
 import com.madhu.qou.service.ingestion.PreprocessingService;
@@ -42,12 +42,21 @@ public class QueryUnderstandingService {
                     .collect(Collectors.toList());
 
             List<Facet> facets = parseFacets(esResponse.aggregations());
+            String suggestion = null;
 
-            return new FacetedSearchResponse(products, facets);
+            if (esResponse.hits().total().value() == 0 && esResponse.suggest() != null) {
+                // Only build a suggestion if the 'spell-check' section is present
+                var spellCheck = esResponse.suggest().get("spell-check");
+                if (spellCheck != null) {
+                    suggestion = buildSuggestionString(spellCheck);
+                }
+            }
+
+            return new FacetedSearchResponse(products, facets, suggestion);
 
         } catch (IOException e) {
             log.error("Error during faceted search execution", e);
-            return new FacetedSearchResponse(Collections.emptyList(), Collections.emptyList());
+            return new FacetedSearchResponse(Collections.emptyList(), Collections.emptyList(), null);
         }
     }
 
@@ -59,6 +68,24 @@ public class QueryUnderstandingService {
         PreprocessedQuery preprocessedQuery = preprocessingService.process(request);
         UnderstoodQuery understoodQuery = intentAndEntityService.process(preprocessedQuery);
         return queryRewriteService.buildEsQuery(understoodQuery);
+    }
+
+    private String buildSuggestionString(List<co.elastic.clients.elasticsearch.core.search.Suggestion<Product>> suggestions) {
+        StringBuilder correctedQuery = new StringBuilder();
+        for (var suggestion : suggestions) {
+            TermSuggest term = suggestion.term(); // Get the TermSuggest object
+
+            // FIX: Call .options() directly on the TermSuggest object
+            if (!term.options().isEmpty()) {
+                // Append the first (and likely best) correction option
+                correctedQuery.append(term.options().get(0).text());
+            } else {
+                // If no correction, append the original text
+                correctedQuery.append(term.text());
+            }
+            correctedQuery.append(" ");
+        }
+        return correctedQuery.toString().trim();
     }
 
     private List<Facet> parseFacets(Map<String, Aggregate> aggregations) {
