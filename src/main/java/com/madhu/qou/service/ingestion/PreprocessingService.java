@@ -22,12 +22,9 @@ public class PreprocessingService {
         if (query == null || query.isBlank()) {
             return "";
         }
-        // 1. Trim and Lowercase
         String processedQuery = query.trim().toLowerCase();
-        // 2. Fold Diacritics
         processedQuery = Normalizer.normalize(processedQuery, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "");
-        // 3. Remove non-essential special characters
         processedQuery = processedQuery.replaceAll("[^a-z0-9\\s-]", "");
         return processedQuery;
     }
