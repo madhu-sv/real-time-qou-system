@@ -42,6 +42,9 @@ public class QueryRewriteService {
                         filterClauses.add(TermQuery.of(t -> t.field("grocery_attributes.is_organic").value(true))._toQuery());
                     }
                 }
+                case "AISLE" ->
+                    // If the NER finds an aisle, filter on our "categories" field
+                        filterClauses.add(TermQuery.of(t -> t.field("categories").value(entity.value()))._toQuery());
             }
         }
 
