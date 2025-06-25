@@ -114,4 +114,27 @@ class QoUSystemApplicationTests {
                 //    where the brand is NOT 'Horizon Organic'. This proves the filter worked.
                 .andExpect(jsonPath("$.products[?(@.brand != 'Philadelphia')]", empty()));
     }
+
+    @Test
+    void whenQueryContainsAisleEntity_thenResultsAreFilteredByCategory() throws Exception {
+        // Arrange: Use a query that our NER model will parse to find an AISLE
+        // The pattern "yogurt" was added to patterns.json by our build script.
+        String requestBody = """
+            {
+                "rawQuery": "show me items from the yogurt aisle"
+            }
+            """;
+
+        // Act & Assert: Hit the main /search endpoint
+        mockMvc.perform(post("/api/v1/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                // 1. Assert we actually get some products back
+                .andExpect(jsonPath("$.products", hasSize(greaterThan(0))))
+                // 2. The crucial assertion:
+                //    Assert that there are NO products in the results where the 'categories'
+                //    array does NOT contain "yogurt". This proves the filter worked.
+                .andExpect(jsonPath("$.products[?('yogurt' nin @.categories)]", empty()));
+    }
 }
