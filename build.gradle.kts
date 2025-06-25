@@ -2,6 +2,8 @@ plugins {
 	java
 	id("org.springframework.boot") version "3.5.3"
 	id("io.spring.dependency-management") version "1.1.7"
+	// Add the OWASP plugin
+	id("org.owasp.dependencycheck") version "9.2.0"
 }
 
 group = "com.madhu"
@@ -39,13 +41,34 @@ dependencies {
 	// OpenCSV for reading Kaggle data
 	implementation("com.opencsv:opencsv:5.9")
 	// Swagger / OpenAPI documentation
-	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
 
 	testImplementation("org.testcontainers:junit-jupiter:1.19.8")
 	testImplementation("org.testcontainers:elasticsearch:1.19.8")
 
 }
 
+
 tasks.withType<Test> {
 	useJUnitPlatform()
+}
+
+tasks.register("generatePatterns") {
+    group = "build"
+    description = "Regenerate patterns.json from build_patterns.py"
+    inputs.files("build_patterns.py", "requirements.txt")
+    outputs.file("patterns.json")
+    doLast {
+        exec {
+            commandLine("python3", "-m", "pip", "install", "-r", "requirements.txt")
+        }
+        exec {
+            commandLine("python3", "build_patterns.py")
+        }
+    }
+
+}
+
+tasks.named("processResources") {
+	dependsOn("generatePatterns")
 }
