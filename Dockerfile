@@ -3,23 +3,24 @@ FROM python:3.9-slim
 
 LABEL authors="madhusudhanv"
 
+# First, update the package list, then install the 'build-essential' package
+RUN apt-get update && apt-get install -y build-essential
+
 # Set the working directory inside the container
 WORKDIR /app
 
-# 1. Install spaCy, FastAPI, and Uvicorn for the NER API
-RUN pip install --no-cache-dir \
-        spacy==3.7.2 \
-        fastapi uvicorn
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# 2. Download the specific English model we want to use
-RUN python -m spacy download en_core_web_sm
+# Download the medium English model
+RUN python -m spacy download en_core_web_md
+
+# Copy application code, custom patterns, and fine-tuned model
+COPY ner_api.py patterns.json fine_tuned_ner_model /app/
 
 # Expose the port the server will run on
 EXPOSE 8000
 
-# 3. Copy the custom NER API script and patterns file
-COPY ner_api.py ./
-COPY patterns.json ./
-
-# 4. Run the FastAPI server on port 8000
+# Start the FastAPI server using uvicorn
 CMD ["uvicorn", "ner_api:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -13,8 +13,11 @@ services:
 
   # --- UPDATED NER SERVICE TO BUILD LOCALLY ---
   ner-api:
-    # Instead of an 'image' tag, we use 'build'
-    build: .
+    # Build and tag the local NER API image for Testcontainers compatibility
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: real-time-qou-system-ner-api:latest
     ports:
       - "8000:8000"
 

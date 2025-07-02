@@ -59,14 +59,13 @@ tasks.register("generatePatterns") {
     inputs.files("build_patterns.py", "requirements.txt")
     outputs.file("patterns.json")
     doLast {
-        exec {
+        project.exec {
             commandLine("python3", "-m", "pip", "install", "-r", "requirements.txt")
         }
-        exec {
+        project.exec {
             commandLine("python3", "build_patterns.py")
         }
     }
-
 }
 
 tasks.named("processResources") {

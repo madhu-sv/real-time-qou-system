@@ -21,7 +21,8 @@ public class IntentAndEntityService {
     // Fallback brand list (same set as DataSeeder KNOWN_BRANDS)
     private static final Set<String> BRANDS = Set.of(
             "Fage", "Annie's", "Newman's Own", "General Mills", "Blue Diamond",
-            "Bonne Maman", "Philadelphia", "Stacy's", "Kellogg's", "Horizon Organic"
+            "Bonne Maman", "Philadelphia", "Stacy's", "Kellogg's", "Horizon Organic",
+            "Nike"
     );
 
     public UnderstoodQuery process(PreprocessedQuery preprocessedQuery) {
@@ -34,7 +35,15 @@ public class IntentAndEntityService {
 
         // Transform the NER API's response into our application's internal Entity DTO
         List<Entity> entities = nerResponse.entities().stream()
-                .map(nerEntity -> new Entity(nerEntity.text(), nerEntity.label(), -1, -1))
+                .map(nerEntity -> {
+                    String type = nerEntity.label();
+                    if ("ORG".equals(type)) {
+                        type = "BRAND";
+                    } else if ("PRODUCT".equals(type)) {
+                        type = "PRODUCT_TYPE";
+                    }
+                    return new Entity(nerEntity.text(), type, -1, -1);
+                })
                 .collect(Collectors.toList());
 
         // Fallback: if NER didn't extract a BRAND, check for known brand keywords

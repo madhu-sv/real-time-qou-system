@@ -7,7 +7,8 @@ print("Starting pattern generation...")
 KNOWN_BRANDS = {
     "Fage", "Annie's", "Newman's Own", "General Mills", "Blue Diamond",
     "Bonne Maman", "Philadelphia", "Stacy's", "Kellogg's", "Horizon Organic",
-    "YoBaby", "Chobani", "Udi's", "Earth's Best", "Organic Valley", "Green & Black's"
+    "YoBaby", "Chobani", "Udi's", "Earth's Best", "Organic Valley", "Green & Black's",
+    "Adidas"
 }
 
 def extract_brand(product_name):
@@ -31,14 +32,12 @@ all_patterns = []
 
 # --- 1. Generate patterns for DEPARTMENTS ---
 for department in departments_df['department'].unique():
-    # FIX: Convert pattern to lowercase
     all_patterns.append({"label": "DEPARTMENT", "pattern": department.lower()})
 print(f"Generated {len(departments_df['department'].unique())} patterns for departments.")
 
 # --- 2. Generate patterns for AISLES ---
 for aisle in aisles_df['aisle'].unique():
     if aisle not in ["missing", "other"]:
-        # FIX: Convert pattern to lowercase
         all_patterns.append({"label": "AISLE", "pattern": aisle.lower()})
 print(f"Generated {len(aisles_df['aisle'].unique())} patterns for aisles.")
 
@@ -47,7 +46,6 @@ products_df['brand'] = products_df['product_name'].apply(extract_brand)
 unique_brands = products_df['brand'].unique()
 
 for brand in unique_brands:
-    # Convert pattern to lowercase
     all_patterns.append({"label": "BRAND", "pattern": brand.lower()})
 print(f"Generated {len(unique_brands)} patterns for brands from product names.")
 
@@ -60,6 +58,8 @@ print(f"Added {len(KNOWN_BRANDS)} additional known-brand patterns.")
 all_patterns.append({"label": "DIETARY_ATTRIBUTE", "pattern": "organic"})
 all_patterns.append({"label": "DIETARY_ATTRIBUTE", "pattern": "gluten-free"})
 all_patterns.append({"label": "DIETARY_ATTRIBUTE", "pattern": "vegan"})
+all_patterns.append({"label": "PRODUCT", "pattern": "running shoes"})
+
 
 # --- Write the final list to patterns.json ---
 with open('patterns.json', 'w') as f:

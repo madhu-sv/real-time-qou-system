@@ -46,6 +46,8 @@ class QoUSystemApplicationTests {
     @DynamicPropertySource
     static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
+        registry.add("ner.api.url", () -> String.format(
+                "http://%s:%d/ent", nerApi.getHost(), nerApi.getMappedPort(8000)));
     }
 
     @Autowired
@@ -136,5 +138,23 @@ class QoUSystemApplicationTests {
                 //    Assert that there are NO products in the results where the 'categories'
                 //    array does NOT contain "yogurt". This proves the filter worked.
                 .andExpect(jsonPath("$.products[?('yogurt' nin @.categories)]", empty()));
+    }
+
+    @Test
+    void whenQueryContainsUnseenBrandEntity_thenResultsAreFilteredByBrand() throws Exception {
+        // Arrange: Use a query with a brand not in patterns.json
+        String requestBody = """
+            {
+                "rawQuery": "I want to buy some Nike shoes"
+            }
+            """;
+
+        // Act & Assert
+        mockMvc.perform(post("/api/v1/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.products", hasSize(greaterThan(0))))
+                .andExpect(jsonPath("$.products[?(@.brand != 'Nike')]", empty()));
     }
 }

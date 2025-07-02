@@ -4,6 +4,8 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.core.search.Suggestion;
 import co.elastic.clients.elasticsearch.core.search.TermSuggest; // <-- Import this
 import com.madhu.qou.dto.*;
 import com.madhu.qou.dto.domain.Product;
@@ -15,10 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,23 +31,26 @@ public class QueryUnderstandingService {
     private final QueryRewriteService queryRewriteService;
 
     public FacetedSearchResponse processFacetedQuery(CustomSearchRequest request) {
-        SearchRequest esRequest = buildSearchRequest(request);
+        // Build the request, which also performs NER
+        UnderstoodQuery understoodQuery = understandQuery(request);
+        SearchRequest esRequest = queryRewriteService.buildEsQuery(understoodQuery);
 
         try {
             SearchResponse<Product> esResponse = esClient.search(esRequest, Product.class);
 
             List<Product> products = esResponse.hits().hits().stream()
-                    .map(hit -> hit.source())
+                    .map(Hit::source)
                     .collect(Collectors.toList());
 
             List<Facet> facets = parseFacets(esResponse.aggregations());
             String suggestion = null;
 
+            assert esResponse.hits().total() != null;
             if (esResponse.hits().total().value() == 0 && esResponse.suggest() != null) {
-                // Only build a suggestion if the 'spell-check' section is present
-                var spellCheck = esResponse.suggest().get("spell-check");
-                if (spellCheck != null) {
-                    suggestion = buildSuggestionString(spellCheck);
+                List<Suggestion<Product>> spellCheckSuggestions = esResponse.suggest().get("spell-check");
+                if (spellCheckSuggestions != null && !spellCheckSuggestions.isEmpty()) {
+                    // Pass the list of found entities to the suggestion builder
+                    suggestion = buildSuggestionString(spellCheckSuggestions, understoodQuery.entities());
                 }
             }
 
@@ -58,6 +60,12 @@ public class QueryUnderstandingService {
             log.error("Error during faceted search execution", e);
             return new FacetedSearchResponse(Collections.emptyList(), Collections.emptyList(), null);
         }
+    }
+
+    // Renamed this method for clarity and to be re-used
+    private UnderstoodQuery understandQuery(CustomSearchRequest request) {
+        PreprocessedQuery preprocessedQuery = preprocessingService.process(request);
+        return intentAndEntityService.process(preprocessedQuery);
     }
 
     public SearchRequest getDebugQuery(CustomSearchRequest request) {
@@ -70,22 +78,33 @@ public class QueryUnderstandingService {
         return queryRewriteService.buildEsQuery(understoodQuery);
     }
 
-    private String buildSuggestionString(List<co.elastic.clients.elasticsearch.core.search.Suggestion<Product>> suggestions) {
-        StringBuilder correctedQuery = new StringBuilder();
-        for (var suggestion : suggestions) {
-            TermSuggest term = suggestion.term(); // Get the TermSuggest object
+    private String buildSuggestionString(List<Suggestion<Product>> suggestions, List<Entity> entities) {
+        // Create a set of all the words that were identified as entities for quick lookup
+        Set<String> entityWords = entities.stream()
+                .flatMap(entity -> Arrays.stream(entity.value().split("\\s+")))
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
 
-            // FIX: Call .options() directly on the TermSuggest object
-            if (!term.options().isEmpty()) {
-                // Append the first (and likely best) correction option
+        StringBuilder correctedQuery = new StringBuilder();
+        boolean wasCorrectionMade = false;
+
+        for (var suggestion : suggestions) {
+            TermSuggest term = suggestion.term();
+            String originalWord = term.text();
+
+            // Only use the suggestion if the original word is NOT a known entity
+            if (!entityWords.contains(originalWord.toLowerCase()) && !term.options().isEmpty()) {
                 correctedQuery.append(term.options().get(0).text());
+                wasCorrectionMade = true; // Mark that we made at least one change
             } else {
-                // If no correction, append the original text
-                correctedQuery.append(term.text());
+                // Otherwise, keep the original word
+                correctedQuery.append(originalWord);
             }
             correctedQuery.append(" ");
         }
-        return correctedQuery.toString().trim();
+
+        // Only return a suggestion if we actually corrected something
+        return wasCorrectionMade ? correctedQuery.toString().trim() : null;
     }
 
     private List<Facet> parseFacets(Map<String, Aggregate> aggregations) {

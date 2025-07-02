@@ -37,3 +37,6 @@ out/
 .vscode/
 .env.local
 patterns.json
+
+### Python ###
+__pycache__/

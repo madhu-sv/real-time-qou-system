@@ -10,6 +10,59 @@ This project is a sophisticated proof-of-concept for a real-time e-commerce quer
 * **Realistic Data Seeding:** Automatically seeds the database on first run using the well-known Instacart Kaggle dataset (~50,000 products).
 * **Automated Integration Testing:** Includes a robust testing suite using **Testcontainers**, which programmatically spins up a dedicated Elasticsearch instance for each test run, ensuring 100% reliable and isolated tests.
 
+## High-Level Architecture
+
+The system is designed with a decoupled, microservice-based approach. The main Java application handles the core search logic, while a dedicated Python service handles the computationally expensive Machine Learning tasks.
+
+```mermaid
+graph TD
+    subgraph User
+        U["User's Browser/App"]
+    end
+    subgraph "Java Application (QoU System on port 8080)"
+        C["SearchController"]
+        S["QueryUnderstandingService"]
+        N["NerApiClient"]
+        E["ElasticsearchClient"]
+    end
+    subgraph "Python ML Service (on port 8000)"
+        NER["ner-api on Docker"]
+    end
+    subgraph "Data Store"
+        ES["Elasticsearch on Docker"]
+    end
+
+    U -- "HTTP API Calls" --> C
+    C --> S
+    S -- "Calls client to get entities" --> N
+    S -- "Calls client to get results" --> E
+    N -- "HTTP POST to :8000/ent" --> NER
+    NER -- "JSON with entities" --> N
+    E -- "Elasticsearch DSL Query" --> ES
+    ES -- "Products, Facets, Suggestions" --> E
+```
+
+### Detailed Data Flow
+
+Here is a sequence diagram illustrating the data flow for a typical search query:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant JavaApp as Java Application (:8080)
+    participant NerAPI as Python NER API (:8000)
+    participant Elasticsearch as Elasticsearch (:9200)
+
+    User->>+JavaApp: POST /api/v1/search (rawQuery)
+    Note over JavaApp: QueryUnderstandingService receives request
+    JavaApp->>+NerAPI: POST /ent (text)
+    NerAPI-->>-JavaApp: Returns JSON with entities
+    Note over JavaApp: QueryRewriteService builds ES query
+    JavaApp->>+Elasticsearch: Sends Search Request
+    Elasticsearch-->>-JavaApp: Returns Search Response
+    JavaApp-->>-User: Returns Final JSON (FacetedSearchResponse)
+```
+
 ## Tech Stack
 
 * Java 21
@@ -28,6 +81,10 @@ This project is a sophisticated proof-of-concept for a real-time e-commerce quer
   ```bash
   pip install pandas
   ```
+* Python 3.9+ and `spacy` (for training the fine-tuned NER model)
+  ```bash
+  pip install spacy
+  ```
 * A tool for making API requests, like `curl` or Postman.
 
 ## Project Setup
@@ -39,13 +96,21 @@ This project is a sophisticated proof-of-concept for a real-time e-commerce quer
     * Unzip it and find the `products.csv` and `aisles.csv` files.
     * Place these two files inside the `src/main/resources/data/` directory. The application is configured to read from this exact location.
 
+### Generating the fine-tuned NER model
+
+If you want to use the custom-trained spaCy NER model, run:
+```bash
+python train_ner.py
+```
+This will produce the `fine_tuned_ner_model/` directory that is baked into the Docker image.
+
 ## Running the Application (Manual Mode)
 
 This describes how to run the application and connect to a persistent Elasticsearch container that you manage yourself.
 
-1.  **Start Elasticsearch Container:**
+1.  **Start Elasticsearch and NER API containers:**
     ```bash
-    docker-compose up -d
+    docker-compose up --build -d
     ```
 
 2.  **Run the Spring Boot App:**

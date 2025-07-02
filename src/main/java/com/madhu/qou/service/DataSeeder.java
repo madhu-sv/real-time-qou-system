@@ -23,7 +23,8 @@ public class DataSeeder {
     private final ElasticsearchClient esClient;
     private static final Set<String> KNOWN_BRANDS = Set.of(
             "Fage", "Annie's", "Newman's Own", "General Mills", "Blue Diamond",
-            "Bonne Maman", "Philadelphia", "Stacy's", "Kellogg's", "Horizon Organic"
+            "Bonne Maman", "Philadelphia", "Stacy's", "Kellogg's", "Horizon Organic",
+            "Nike"
     );
 
     // This method is now public
