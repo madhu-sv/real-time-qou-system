@@ -13,6 +13,7 @@ build/
 .settings
 .springBeans
 .sts4-cache
+fine_tuned_ner_model/
 bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
